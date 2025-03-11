@@ -1,4 +1,4 @@
-import numpy as np
+import jax.numpy as jnp
 import torch as th
 
 from .gaussian_diffusion import GaussianDiffusion
@@ -82,7 +82,7 @@ class SpacedDiffusion(GaussianDiffusion):
                 new_betas.append(1 - alpha_cumprod / last_alpha_cumprod)
                 last_alpha_cumprod = alpha_cumprod
                 self.timestep_map.append(i)
-        kwargs["betas"] = np.array(new_betas)
+        kwargs["betas"] = jnp.array(new_betas)
         super().__init__(**kwargs)
 
     def p_mean_variance(
