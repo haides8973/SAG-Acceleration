@@ -11,8 +11,8 @@ import torch as th
 import torch.distributed as dist
 import yaml
 
-from guided_diffusion import dist_util, logger
-from guided_diffusion.script_util import (
+from diffusion_skip import dist_util, logger
+from diffusion_skip.script_util import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
@@ -107,6 +107,7 @@ def main():
             np.savez(out_path, arr)
 
     dist.barrier()
+
     end = datetime.datetime.now()
     total_seconds = (end-start).total_seconds()
     logger.log(f"sampling completed at {datetime.datetime.now()}")
@@ -121,8 +122,14 @@ def create_argparser():
         use_ddim=False,
         model_path="",
     )
-    defaults.update(model_and_diffusion_defaults())
-    defaults.update(sag_defaults())
+
+    def update_(default : dict, d : dict):
+        for key in d:
+            if key not in default:
+                default[key] = d[key]
+
+    update_(defaults, model_and_diffusion_defaults())
+    update_(defaults, sag_defaults())
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser

@@ -1,10 +1,9 @@
 import argparse
-import inspect
 from typing import Tuple
 
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
-from .unet import EncoderUNetModel, SuperResModel, UNetModel
+from .unet import EncoderUNetModel, SkippableUnet
 
 NUM_CLASSES = 1000
 
@@ -27,10 +26,10 @@ def diffusion_defaults():
     Defaults for image and classifier training.
     """
     return dict(
-        learn_sigma=False,
+        learn_sigma=True,
         diffusion_steps=1000,
         noise_schedule="linear",
-        timestep_respacing="",
+        timestep_respacing="250",
         use_kl=False,
         predict_xstart=False,
         rescale_timesteps=False,
@@ -43,13 +42,13 @@ def classifier_defaults():
     Defaults for classifier models.
     """
     return dict(
-        image_size=64,
+        image_size=128,
         classifier_use_fp16=False,
         classifier_width=128,
         classifier_depth=2,
         classifier_attention_resolutions="32,16,8",  # 16
-        classifier_use_scale_shift_norm=True,  # False
-        classifier_resblock_updown=True,  # False
+        classifier_use_scale_shift_norm=True,
+        classifier_resblock_updown=True, 
         classifier_pool="attention",
     )
 
@@ -59,21 +58,22 @@ def model_and_diffusion_defaults():
     Defaults for image training.
     """
     res = dict(
-        image_size=64,
-        num_channels=128,
+        image_size=128,
+        num_channels=256,
         num_res_blocks=2,
         num_heads=4,
         num_heads_upsample=-1,
         num_head_channels=-1,
-        attention_resolutions="16,8",
+        attention_resolutions="32,16,8",
         channel_mult="",
         dropout=0.0,
-        class_cond=False,
+        class_cond=True,
         use_checkpoint=False,
         use_scale_shift_norm=True,
-        resblock_updown=False,
+        resblock_updown=True,
         use_fp16=False,
         use_new_attention_order=False,
+        skip_depth=2,
     )
     res.update(diffusion_defaults())
     return res
@@ -111,7 +111,8 @@ def create_model_and_diffusion(
     use_new_attention_order,
     sel_attn_depth,
     sel_attn_block,
-) -> Tuple[UNetModel, SpacedDiffusion]:
+    skip_depth,
+) -> Tuple[SkippableUnet, SpacedDiffusion]:
     model = create_model(
         image_size,
         num_channels,
@@ -131,6 +132,7 @@ def create_model_and_diffusion(
         use_new_attention_order=use_new_attention_order,
         sel_attn_block=sel_attn_block,
         sel_attn_depth=sel_attn_depth,
+        skip_depth=skip_depth
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -166,7 +168,8 @@ def create_model(
     use_fp16=False,
     use_new_attention_order=False,
     sel_attn_block=None,
-    sel_attn_depth=None
+    sel_attn_depth=None,
+    skip_depth=0,
 ):
     if channel_mult == "":
         if image_size == 512:
@@ -186,7 +189,7 @@ def create_model(
     for res in attention_resolutions.split(","):
         attention_ds.append(image_size // int(res))
 
-    return UNetModel(
+    return SkippableUnet(
         image_size=image_size,
         in_channels=3,
         model_channels=num_channels,
@@ -206,6 +209,7 @@ def create_model(
         use_new_attention_order=use_new_attention_order,
         sel_attn_block=sel_attn_block,
         sel_attn_depth=sel_attn_depth,
+        skip_depth=skip_depth,
     )
 
 
@@ -291,122 +295,6 @@ def create_classifier(
     )
 
 
-def sr_model_and_diffusion_defaults():
-    res = model_and_diffusion_defaults()
-    res["large_size"] = 256
-    res["small_size"] = 64
-    arg_names = inspect.getfullargspec(sr_create_model_and_diffusion)[0]
-    for k in res.copy().keys():
-        if k not in arg_names:
-            del res[k]
-    return res
-
-
-def sr_create_model_and_diffusion(
-    large_size,
-    small_size,
-    class_cond,
-    learn_sigma,
-    num_channels,
-    num_res_blocks,
-    num_heads,
-    num_head_channels,
-    num_heads_upsample,
-    attention_resolutions,
-    dropout,
-    diffusion_steps,
-    noise_schedule,
-    timestep_respacing,
-    use_kl,
-    predict_xstart,
-    rescale_timesteps,
-    rescale_learned_sigmas,
-    use_checkpoint,
-    use_scale_shift_norm,
-    resblock_updown,
-    use_fp16,
-):
-    model = sr_create_model(
-        large_size,
-        small_size,
-        num_channels,
-        num_res_blocks,
-        learn_sigma=learn_sigma,
-        class_cond=class_cond,
-        use_checkpoint=use_checkpoint,
-        attention_resolutions=attention_resolutions,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        dropout=dropout,
-        resblock_updown=resblock_updown,
-        use_fp16=use_fp16,
-    )
-    diffusion = create_gaussian_diffusion(
-        steps=diffusion_steps,
-        learn_sigma=learn_sigma,
-        noise_schedule=noise_schedule,
-        use_kl=use_kl,
-        predict_xstart=predict_xstart,
-        rescale_timesteps=rescale_timesteps,
-        rescale_learned_sigmas=rescale_learned_sigmas,
-        timestep_respacing=timestep_respacing,
-    )
-    return model, diffusion
-
-
-def sr_create_model(
-    large_size,
-    small_size,
-    num_channels,
-    num_res_blocks,
-    learn_sigma,
-    class_cond,
-    use_checkpoint,
-    attention_resolutions,
-    num_heads,
-    num_head_channels,
-    num_heads_upsample,
-    use_scale_shift_norm,
-    dropout,
-    resblock_updown,
-    use_fp16,
-):
-    _ = small_size  # hack to prevent unused variable
-
-    if large_size == 512:
-        channel_mult = (1, 1, 2, 2, 4, 4)
-    elif large_size == 256:
-        channel_mult = (1, 1, 2, 2, 4, 4)
-    elif large_size == 64:
-        channel_mult = (1, 2, 3, 4)
-    else:
-        raise ValueError(f"unsupported large size: {large_size}")
-
-    attention_ds = []
-    for res in attention_resolutions.split(","):
-        attention_ds.append(large_size // int(res))
-
-    return SuperResModel(
-        image_size=large_size,
-        in_channels=3,
-        model_channels=num_channels,
-        out_channels=(3 if not learn_sigma else 6),
-        num_res_blocks=num_res_blocks,
-        attention_resolutions=tuple(attention_ds),
-        dropout=dropout,
-        channel_mult=channel_mult,
-        num_classes=(NUM_CLASSES if class_cond else None),
-        use_checkpoint=use_checkpoint,
-        num_heads=num_heads,
-        num_head_channels=num_head_channels,
-        num_heads_upsample=num_heads_upsample,
-        use_scale_shift_norm=use_scale_shift_norm,
-        resblock_updown=resblock_updown,
-        use_fp16=use_fp16,
-    )
-
 
 def create_gaussian_diffusion(
     *,
@@ -432,6 +320,7 @@ def create_gaussian_diffusion(
         loss_type = gd.LossType.MSE
     if not timestep_respacing:
         timestep_respacing = [steps]
+        
     return SpacedDiffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),
         betas=betas,
@@ -467,6 +356,7 @@ def add_dict_to_argparser(parser, default_dict):
 
 def args_to_dict(args, keys):
     return {k: getattr(args, k) for k in keys}
+    
 
 
 def str2bool(v):

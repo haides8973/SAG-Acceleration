@@ -5,3 +5,4 @@ models/
 *.npz
 RESULTS/
 guided_diffusion.egg-info/
+ref_batches/

@@ -129,12 +129,12 @@ def center_crop_arr(pil_image, image_size):
     # Thus, we do it by hand to improve downsample quality.
     while min(*pil_image.size) >= 2 * image_size:
         pil_image = pil_image.resize(
-            tuple(x // 2 for x in pil_image.size), resample=Image.BOX
+            tuple(x // 2 for x in pil_image.size), resample=Image.BOX # type: ignore
         )
 
     scale = image_size / min(*pil_image.size)
     pil_image = pil_image.resize(
-        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
+        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC # type: ignore
     )
 
     arr = np.array(pil_image)
@@ -153,12 +153,12 @@ def random_crop_arr(pil_image, image_size, min_crop_frac=0.8, max_crop_frac=1.0)
     # Thus, we do it by hand to improve downsample quality.
     while min(*pil_image.size) >= 2 * smaller_dim_size:
         pil_image = pil_image.resize(
-            tuple(x // 2 for x in pil_image.size), resample=Image.BOX
+            tuple(x // 2 for x in pil_image.size), resample=Image.BOX # type: ignore
         )
 
     scale = smaller_dim_size / min(*pil_image.size)
     pil_image = pil_image.resize(
-        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC
+        tuple(round(x * scale) for x in pil_image.size), resample=Image.BICUBIC # type: ignore
     )
 
     arr = np.array(pil_image)

@@ -83,6 +83,8 @@ def main():
     guidance_kwargs["guide_scale"] = args.guide_scale
     guidance_kwargs["blur_sigma"] = args.blur_sigma
 
+    start = datetime.datetime.now()
+    
     while len(all_images) * args.batch_size < args.num_samples:
         model_kwargs = {}
         classes = th.randint(
@@ -124,7 +126,11 @@ def main():
         np.savez(out_path, arr, label_arr)
 
     dist.barrier()
-    logger.log("sampling complete")
+    
+    end = datetime.datetime.now()
+    total_seconds = (end-start).total_seconds()
+    logger.log(f"sampling completed at {datetime.datetime.now()}")
+    logger.log(f"{total_seconds} seconds to sample {args.num_samples} images.")
 
 
 def create_argparser():

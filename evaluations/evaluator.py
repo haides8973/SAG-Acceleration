@@ -13,7 +13,7 @@ from typing import Iterable, Optional, Tuple
 
 import numpy as np
 import requests
-import tensorflow.compat.v1 as tf
+import tensorflow._api.v2.compat.v1 as tf   # modified from tensorflow.compat.v1
 from scipy import linalg
 from tqdm.auto import tqdm
 
@@ -119,7 +119,7 @@ class Evaluator:
     def __init__(
         self,
         session,
-        batch_size=64,
+        batch_size=128,
         softmax_batch_size=512,
     ):
         self.sess = session
@@ -514,7 +514,7 @@ class MemoryNpzArrayReader(NpzArrayReader):
 
 
 @contextmanager
-def open_npz_array(path: str, arr_name: str) -> NpzArrayReader:
+def open_npz_array(path: str, arr_name: str):
     with _open_npy_file(path, arr_name) as arr_f:
         version = np.lib.format.read_magic(arr_f)
         if version == (1, 0):
